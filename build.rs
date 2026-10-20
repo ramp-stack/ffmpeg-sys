@@ -1117,7 +1117,7 @@ fn main() {
                             line.split('=')
                                 .next_back()
                                 .unwrap()
-                                .split(' ')
+                                .split_whitespace()
                                 .map(|s| s.to_string())
                                 .collect::<Vec<_>>(),
                         )
@@ -1133,6 +1133,11 @@ fn main() {
                 .filter(|flag| flag.starts_with("-l"))
                 .map(|lib| &lib[2..])
                 .for_each(|lib| println!("cargo:rustc-link-lib={lib}"));
+
+            extra_linker_args
+                .windows(2)
+                .filter(|args| args[0] == "-framework")
+                .for_each(|args| println!("cargo:rustc-link-lib=framework={}", args[1]));
 
             extra_linker_args
                 .iter()
@@ -1186,6 +1191,23 @@ fn main() {
             );
         }
         link_to_libraries(statik, &target_os);
+
+        // A prebuilt prefix may not include metadata describing its framework dependencies.
+        if statik && matches!(target_os.as_str(), "macos" | "ios" | "tvos") {
+            for framework in [
+                "AudioToolbox", "AVFoundation", "CoreFoundation", "CoreGraphics", "CoreMedia",
+                "CoreServices", "CoreVideo", "Foundation", "QuartzCore", "Security", "VideoToolbox",
+            ] {
+                println!("cargo:rustc-link-lib=framework={framework}");
+            }
+
+            if target_os == "macos" {
+                for framework in ["AppKit", "OpenCL", "OpenGL", "VideoDecodeAcceleration"] {
+                    println!("cargo:rustc-link-lib=framework={framework}");
+                }
+            }
+        }
+
         vec![ffmpeg_dir.join("include")]
     } else if let Some(paths) = try_vcpkg(statik) {
         // vcpkg doesn't detect the "system" dependencies
@@ -1263,47 +1285,6 @@ fn main() {
             }
         }
     };
-
-    if statik
-        && matches!(
-            env::var("CARGO_CFG_TARGET_OS").as_deref(),
-            Ok("macos") | Ok("ios") | Ok("tvos")
-        )
-    {
-        let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-
-        // Frameworks available on all Apple platforms (macOS, iOS, tvOS)
-        let frameworks = vec![
-            "AudioToolbox",
-            "AVFoundation",
-            "CoreFoundation",
-            "CoreGraphics",
-            "CoreMedia",
-            "CoreServices",
-            "CoreVideo",
-            "Foundation",
-            "QuartzCore",
-            "Security",
-            "VideoToolbox",
-        ];
-        for f in &frameworks {
-            println!("cargo:rustc-link-lib=framework={f}");
-        }
-
-        // Frameworks only available on macOS
-        if target_os == "macos" {
-            let macos_frameworks = vec![
-                "AppKit",
-                "OpenCL",
-                "OpenGL",
-                "QTKit",
-                "VideoDecodeAcceleration",
-            ];
-            for f in &macos_frameworks {
-                println!("cargo:rustc-link-lib=framework={f}");
-            }
-        }
-    }
 
     check_features(
         include_paths.clone(),
