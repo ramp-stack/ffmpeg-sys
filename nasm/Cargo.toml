@@ -1,0 +1,13 @@
+[package]
+name = "ramp-nasm"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+links = "ramp_nasm"
+license = "BSD-2-Clause AND Zlib"
+description = "Bundled NASM source for RAMP Stack Intel builds"
+repository = "https://github.com/ramp-stack/ffmpeg-sys"
+
+[build-dependencies]
+lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "xz"] }
+tar = { version = "0.4", default-features = false }

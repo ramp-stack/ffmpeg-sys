@@ -1,6 +1,6 @@
 [package]
 name    = "ramp-ffmpeg-sys"
-version = "9.0.2"
+version = "9.0.3"
 build   = "build.rs"
 links   = "ffmpeg"
 edition = "2024"
@@ -11,7 +11,7 @@ license-file = "LICENSE.md"
 description = "RAMP Stack FFmpeg bindings with bundled source and Apple static linking"
 repository  = "https://github.com/ramp-stack/ffmpeg-sys"
 keywords    = ["audio", "video"]
-exclude = ["bindings/*.rs"]
+exclude = ["bindings/*.rs", "nasm/**"]
 
 [lib]
 name = "ffmpeg_sys_next"
@@ -20,6 +20,9 @@ doctest = false
 
 [dependencies]
 libc = "0.2"
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
+ramp-nasm = { version = "0.1.0", optional = true }
 
 [build-dependencies]
 num_cpus   = "1.17"
@@ -48,7 +51,8 @@ build-license-nonfree  = ["build"]
 build-license-version3 = ["build"]
 
 # misc
-build-portable = ["build"]
+build-portable = ["build", "bundled-nasm"]
+bundled-nasm = ["build", "dep:ramp-nasm"]
 build-drm   = ["build"]
 build-nvenc = ["build"]
 build-pic   = ["build"]

@@ -344,6 +344,12 @@ fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<(
     configure.current_dir(&source_dir);
     configure.arg(format!("--prefix={}", search().to_string_lossy()));
 
+    if cfg!(feature = "bundled-nasm")
+        && matches!(env::var("CARGO_CFG_TARGET_ARCH").as_deref(), Ok("x86" | "x86_64"))
+    {
+        configure.arg(format!("--x86asmexe={}", env::var("DEP_RAMP_NASM_BIN").unwrap()));
+    }
+
     if let Some(flag) = apple_version_min {
         for option in ["--extra-cflags", "--extra-objcflags", "--extra-ldflags"] {
             configure.arg(format!("{option}={flag}"));

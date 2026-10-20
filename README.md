@@ -11,7 +11,11 @@ pregenerated Apple bindings. The safe wrapper is
 The default features compile the bundled C source into static libraries with portable
 CPU settings. macOS and iOS builds use pregenerated bindings, so no installed FFmpeg,
 pkg-config, libclang, Git, or build-time source download is required. A native C
-compiler, Make, and the target SDK are still required; Intel builds also require NASM.
+compiler, Make, and the target SDK are still required. Intel targets automatically build
+bundled NASM to preserve optimized assembly; no separate NASM installation is needed.
+The NASM dependency is enabled by `bundled-nasm` (included in `build-portable`) and is
+compiled only for x86/x86_64 targets. ARM targets skip it. When cross-compiling to Intel,
+NASM itself is built for the host machine and used only during the build.
 On Apple platforms, install Xcode's command-line tools and the SDK for the target.
 
 The pregenerated bindings cover Apple Silicon and Intel macOS, arm64 iOS devices,
