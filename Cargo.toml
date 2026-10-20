@@ -1,18 +1,20 @@
 [package]
-name    = "ffmpeg-sys-next"
-version = "9.0.1"
+name    = "ramp-ffmpeg-sys"
+version = "9.0.2"
 build   = "build.rs"
 links   = "ffmpeg"
 edition = "2024"
 
 authors = ["meh. <meh@schizofreni.co>", "Zhiming Wang <i@zhimingwang.org>"]
-license = "WTFPL"
+license-file = "LICENSE.md"
 
-description = "FFI bindings to FFmpeg"
-repository  = "https://github.com/zmwangx/rust-ffmpeg-sys"
+description = "RAMP Stack FFmpeg bindings with bundled source and Apple static linking"
+repository  = "https://github.com/ramp-stack/ffmpeg-sys"
 keywords    = ["audio", "video"]
+exclude = ["bindings/*.rs"]
 
 [lib]
+name = "ffmpeg_sys_next"
 # Disable doctests as a workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
 doctest = false
 
@@ -23,16 +25,19 @@ libc = "0.2"
 num_cpus   = "1.17"
 cc         = "1.6"
 pkg-config = "0.3"
-bindgen    = { version = "0.73", default-features = false, features = ["runtime"] }
+bindgen    = { version = "0.73", optional = true, default-features = false, features = ["runtime"] }
+lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "xz"] }
+tar        = { version = "0.4", default-features = false }
 
 [target.'cfg(target_env = "msvc")'.build-dependencies]
 vcpkg = "0.2"
 
 [features]
-default  = ["avcodec", "avdevice", "avfilter", "avformat", "swresample", "swscale"]
+default  = ["build-portable", "avcodec", "avdevice", "avfilter", "avformat", "swresample", "swscale"]
 
 static = []
 build  = ["static"]
+generate-bindings = ["dep:bindgen"]
 
 # mark enums in generated bindings as #[non_exhaustive]
 non-exhaustive-enums = []

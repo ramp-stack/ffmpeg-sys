@@ -1,9 +1,27 @@
-[![ffmpeg-sys-next on crates.io](https://img.shields.io/crates/v/ffmpeg-sys-next?cacheSeconds=3600)](https://crates.io/crates/ffmpeg-sys-next)
-[![build](https://github.com/zmwangx/rust-ffmpeg-sys/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/zmwangx/rust-ffmpeg-sys/actions)
+[![ramp-ffmpeg-sys on crates.io](https://img.shields.io/crates/v/ramp-ffmpeg-sys)](https://crates.io/crates/ramp-ffmpeg-sys)
 
-This is a fork of the abandoned [ffmpeg-sys](https://github.com/meh/rust-ffmpeg-sys) crate. You can find this crate as [ffmpeg-sys-next](https://crates.io/crates/ffmpeg-sys-next) on crates.io.
+RAMP Stack's fork of [ffmpeg-sys-next](https://github.com/zmwangx/rust-ffmpeg-sys),
+originally derived from [ffmpeg-sys](https://github.com/meh/rust-ffmpeg-sys).
+It includes the Apple framework-linking fix, bundled FFmpeg 9.0.2 C source, and
+pregenerated Apple bindings. The safe wrapper is
+[ramp-ffmpeg](https://github.com/ramp-stack/ffmpeg).
 
-This crate contains low level bindings to FFmpeg. You're probably interested in the high level bindings instead: [ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg).
+## Building
+
+The default features compile the bundled C source into static libraries with portable
+CPU settings. macOS and iOS builds use pregenerated bindings, so no installed FFmpeg,
+pkg-config, libclang, Git, or build-time source download is required. A native C
+compiler, Make, and the target SDK are still required; Intel builds also require NASM.
+On Apple platforms, install Xcode's command-line tools and the SDK for the target.
+
+The pregenerated bindings cover Apple Silicon and Intel macOS, arm64 iOS devices,
+and arm64/x86_64 iOS simulators. They are used only with the bundled FFmpeg source.
+Other targets and system/prebuilt FFmpeg installations require the explicit
+`generate-bindings` feature and libclang. To use an installed FFmpeg, disable default
+features and enable `generate-bindings` plus the required component features.
+
+The bundled source and its provenance are described in [vendor/README.md](vendor/README.md).
+FFmpeg retains its own licensing; see [LICENSE.md](LICENSE.md).
 
 A word on versioning: major and minor versions track major and minor versions of FFmpeg, e.g. 4.2.x of this crate has been updated to support the 4.2.x series of FFmpeg. Patch level is reserved for bug fixes of this crate and does not track FFmpeg patch versions.
 

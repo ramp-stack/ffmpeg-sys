@@ -1,3 +1,4 @@
+#[cfg(feature = "generate-bindings")]
 extern crate bindgen;
 extern crate cc;
 extern crate num_cpus;
@@ -11,8 +12,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
 
+#[cfg(feature = "generate-bindings")]
 use bindgen::callbacks::{
-    EnumVariantCustomBehavior, EnumVariantValue, IntKind, MacroParsingBehavior, ParseCallbacks,
+    AttributeInfo, EnumVariantCustomBehavior, EnumVariantValue, IntKind, MacroParsingBehavior,
+    ParseCallbacks, TypeKind,
 };
 
 #[derive(Debug)]
@@ -70,9 +73,11 @@ static LIBRARIES: &[Library] = &[
     },
 ];
 
+#[cfg(feature = "generate-bindings")]
 #[derive(Debug)]
 struct Callbacks;
 
+#[cfg(feature = "generate-bindings")]
 impl ParseCallbacks for Callbacks {
     fn int_macro(&self, _name: &str, value: i64) -> Option<IntKind> {
         let ch_layout_prefix = "AV_CH_";
@@ -113,6 +118,14 @@ impl ParseCallbacks for Callbacks {
         }
     }
 
+    fn add_attributes(&self, info: &AttributeInfo<'_>) -> Vec<String> {
+        if info.kind == TypeKind::Enum {
+            vec![r#"#[cfg_attr(feature = "non-exhaustive-enums", non_exhaustive)]"#.to_string()]
+        } else {
+            Vec::new()
+        }
+    }
+
     // https://github.com/rust-lang/rust-bindgen/issues/687#issuecomment-388277405
     fn will_parse_macro(&self, name: &str) -> MacroParsingBehavior {
         use MacroParsingBehavior::*;
@@ -128,25 +141,12 @@ impl ParseCallbacks for Callbacks {
     }
 }
 
-fn version() -> String {
-    let major: u8 = env::var("CARGO_PKG_VERSION_MAJOR")
-        .unwrap()
-        .parse()
-        .unwrap();
-    let minor: u8 = env::var("CARGO_PKG_VERSION_MINOR")
-        .unwrap()
-        .parse()
-        .unwrap();
-
-    format!("{major}.{minor}")
-}
-
 fn output() -> PathBuf {
     PathBuf::from(env::var("OUT_DIR").unwrap())
 }
 
 fn source() -> PathBuf {
-    output().join(format!("ffmpeg-{}", version()))
+    output().join("ffmpeg-9.0.2")
 }
 
 fn search() -> PathBuf {
@@ -157,30 +157,10 @@ fn search() -> PathBuf {
     absolute
 }
 
-fn fetch() -> io::Result<()> {
-    let output_base_path = output();
-    let clone_dest_dir = format!("ffmpeg-{}", version());
-    let _ = std::fs::remove_dir_all(output_base_path.join(&clone_dest_dir));
-    let status = Command::new("git")
-        .current_dir(&output_base_path)
-        .args(if cfg!(target_os = "windows") {
-            vec!["-c", "core.autocrlf=false"]
-        } else {
-            vec![]
-        })
-        .arg("clone")
-        .arg("--depth=1")
-        .arg("-b")
-        .arg(format!("release/{}", version()))
-        .arg("https://github.com/FFmpeg/FFmpeg")
-        .arg(&clone_dest_dir)
-        .status()?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other("fetch failed"))
-    }
+fn unpack() -> io::Result<()> {
+    if source().exists() { fs::remove_dir_all(source())?; }
+    let archive = File::open("vendor/ffmpeg-9.0.2.tar.xz")?;
+    tar::Archive::new(lzma_rust2::XzReader::new(archive, false)).unpack(output())
 }
 
 fn switch(configure: &mut Command, feature: &str, name: &str) {
@@ -209,22 +189,34 @@ fn apple_sdk_name(target_os: &str, is_sim: bool) -> Option<&'static str> {
     }
 }
 
-/// Returns the `-m*-version-min=` cflags for cross-compiling to Apple platforms.
-fn apple_version_min_cflag(target_os: &str, is_sim: bool) -> Option<&'static str> {
-    match (target_os, is_sim) {
-        ("ios", true) => Some("-mios-simulator-version-min=11.0"),
-        ("ios", false) => Some("-mios-version-min=11.0"),
-        ("macos", _) => Some("-mmacosx-version-min=10.11"),
-        ("tvos", true) => Some("-mappletvsimulator-version-min=13.0"),
-        ("tvos", false) => Some("-mappletvos-version-min=13.0"),
-        _ => None,
-    }
+fn apple_version_min_cflag(target_os: &str, is_sim: bool) -> Option<String> {
+    let (variable, flag) = match (target_os, is_sim) {
+        ("ios", true) => ("IPHONEOS_DEPLOYMENT_TARGET", "-mios-simulator-version-min"),
+        ("ios", false) => ("IPHONEOS_DEPLOYMENT_TARGET", "-mios-version-min"),
+        ("macos", _) => ("MACOSX_DEPLOYMENT_TARGET", "-mmacosx-version-min"),
+        ("tvos", true) => ("TVOS_DEPLOYMENT_TARGET", "-mappletvsimulator-version-min"),
+        ("tvos", false) => ("TVOS_DEPLOYMENT_TARGET", "-mappletvos-version-min"),
+        _ => return None,
+    };
+    println!("cargo:rerun-if-env-changed={variable}");
+    let deployment = Command::new(env::var("RUSTC").unwrap())
+        .args(["--target", &env::var("TARGET").unwrap(), "--print", "deployment-target"])
+        .output()
+        .expect("failed to query Rust's Apple deployment target");
+    assert!(
+        deployment.status.success(),
+        "failed to query Rust's Apple deployment target: {}",
+        String::from_utf8_lossy(&deployment.stderr)
+    );
+    let deployment = String::from_utf8(deployment.stdout).unwrap();
+    let (_, version) = deployment.trim().split_once('=').unwrap();
+    Some(format!("{flag}={version}"))
 }
 
 fn get_ffmpeg_target_os() -> String {
     let cargo_target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     match cargo_target_os.as_str() {
-        "ios" | "tvos" => "darwin".to_string(),
+        "macos" | "ios" | "tvos" => "darwin".to_string(),
         _ => cargo_target_os,
     }
 }
@@ -304,7 +296,7 @@ fn validated_cpu_flag(var: &str, value: String) -> String {
     value
 }
 
-fn build(sysroot: Option<&str>) -> io::Result<()> {
+fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<()> {
     let source_dir = source();
     if cfg!(target_os = "windows") {
         let path = env::var("PATH").unwrap_or_default();
@@ -351,6 +343,12 @@ fn build(sysroot: Option<&str>) -> io::Result<()> {
 
     configure.current_dir(&source_dir);
     configure.arg(format!("--prefix={}", search().to_string_lossy()));
+
+    if let Some(flag) = apple_version_min {
+        for option in ["--extra-cflags", "--extra-objcflags", "--extra-ldflags"] {
+            configure.arg(format!("{option}={flag}"));
+        }
+    }
 
     let target = env::var("TARGET").unwrap();
     let host = env::var("HOST").unwrap();
@@ -645,12 +643,6 @@ fn build(sysroot: Option<&str>) -> io::Result<()> {
         && matches!(target_os.as_str(), "ios" | "macos" | "tvos")
     {
         configure.arg("--enable-videotoolbox");
-
-        if target != host
-            && let Some(flag) = apple_version_min_cflag(&target_os, is_sim)
-        {
-            configure.arg(format!("--extra-cflags={flag}"));
-        }
     }
 
     // Apple audio hw acceleration API (iOS, macOS, and tvOS)
@@ -658,12 +650,6 @@ fn build(sysroot: Option<&str>) -> io::Result<()> {
         && matches!(target_os.as_str(), "ios" | "macos" | "tvos")
     {
         configure.arg("--enable-audiotoolbox");
-
-        if target != host
-            && let Some(flag) = apple_version_min_cflag(&target_os, is_sim)
-        {
-            configure.arg(format!("--extra-cflags={flag}"));
-        }
     }
 
     // Linux video acceleration API (VAAPI)
@@ -1037,6 +1023,7 @@ fn check_features(
     }
 }
 
+#[cfg(feature = "generate-bindings")]
 fn search_include(include_paths: &[PathBuf], header: &str) -> String {
     for dir in include_paths {
         let include = dir.join(header);
@@ -1051,6 +1038,7 @@ fn search_include(include_paths: &[PathBuf], header: &str) -> String {
     format!("/usr/include/{header}")
 }
 
+#[cfg(feature = "generate-bindings")]
 fn maybe_search_include(include_paths: &[PathBuf], header: &str) -> Option<String> {
     let path = search_include(include_paths, header);
     if fs::metadata(&path).is_ok() {
@@ -1089,6 +1077,28 @@ fn main() {
     let ffmpeg_major_version: u32 = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
 
+    #[cfg(not(feature = "generate-bindings"))]
+    {
+        assert!(
+            env::var("CARGO_FEATURE_BUILD").is_ok(),
+            "enable generate-bindings when using system or prebuilt FFmpeg libraries"
+        );
+        let target = env::var("TARGET").unwrap();
+        let bindings = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("bindings/bindings.tar.xz");
+        println!("cargo:rerun-if-changed={}", bindings.display());
+        let mut archive = tar::Archive::new(lzma_rust2::XzReader::new(
+            File::open(bindings).unwrap(), false,
+        ));
+        let filename = format!("{target}.rs");
+        let mut binding = archive.entries().unwrap().map(Result::unwrap)
+            .find(|entry| entry.path().unwrap().as_ref() == Path::new(&filename))
+            .unwrap_or_else(|| {
+                panic!("no bundled bindings for {target}; enable the generate-bindings feature")
+            });
+        binding.unpack(output().join("bindings.rs")).expect("could not unpack FFmpeg bindings");
+    }
+
     let sysroot = find_sysroot();
     let include_paths: Vec<PathBuf> = if env::var("CARGO_FEATURE_BUILD").is_ok() {
         println!(
@@ -1096,10 +1106,16 @@ fn main() {
             search().join("lib").to_string_lossy()
         );
         link_to_libraries(statik, &target_os);
-        if fs::metadata(search().join("lib").join("libavutil.a")).is_err() {
+        let apple_version_min = apple_version_min_cflag(&target_os, is_apple_simulator());
+        let deployment_file = output().join("apple-deployment-target");
+        let deployment_changed = apple_version_min.as_ref().is_some_and(|flag| {
+            fs::read_to_string(&deployment_file).ok().as_ref() != Some(flag)
+        });
+        if fs::metadata(search().join("lib").join("libavutil.a")).is_err() || deployment_changed {
             fs::create_dir_all(output()).expect("failed to create build directory");
-            fetch().unwrap();
-            build(sysroot.as_deref()).unwrap();
+            unpack().unwrap();
+            build(sysroot.as_deref(), apple_version_min.as_deref()).unwrap();
+            if let Some(flag) = apple_version_min { fs::write(deployment_file, flag).unwrap(); }
         }
 
         // Check additional required libraries.
@@ -1588,6 +1604,12 @@ fn main() {
         ],
     );
 
+    #[cfg(feature = "generate-bindings")]
+    generate_bindings(&include_paths, sysroot.as_deref(), ffmpeg_major_version);
+}
+
+#[cfg(feature = "generate-bindings")]
+fn generate_bindings(include_paths: &[PathBuf], sysroot: Option<&str>, ffmpeg_major_version: u32) {
     let clang_includes = include_paths
         .iter()
         .map(|include| format!("-I{}", include.to_string_lossy()));
@@ -1702,22 +1724,20 @@ fn main() {
         .blocklist_function("y1l")
         .blocklist_function("ynl")
         .opaque_type("__mingw_ldbl_type_t")
-        .default_enum_style(bindgen::EnumVariation::Rust {
-            non_exhaustive: env::var("CARGO_FEATURE_NON_EXHAUSTIVE_ENUMS").is_ok(),
-        })
+        .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: false })
         .prepend_enum_name(false)
         .wrap_unsafe_ops(true)
         .derive_eq(true)
         .size_t_is_usize(true)
         .parse_callbacks(Box::new(Callbacks));
 
-    if let Some(sysroot) = sysroot.as_deref() {
+    if let Some(sysroot) = sysroot {
         builder = builder.clang_arg(format!("--sysroot={sysroot}"));
     }
 
     // The input headers we would like to generate
     // bindings for.
-    if env::var("CARGO_FEATURE_AVCODEC").is_ok() {
+    if maybe_search_include(include_paths, "libavcodec/avcodec.h").is_some() {
         builder = builder
             .header(search_include(&include_paths, "libavcodec/avcodec.h"))
             .header(search_include(&include_paths, "libavcodec/dv_profile.h"))
@@ -1738,24 +1758,24 @@ fn main() {
         }
     }
 
-    if env::var("CARGO_FEATURE_AVDEVICE").is_ok() {
+    if maybe_search_include(include_paths, "libavdevice/avdevice.h").is_some() {
         builder = builder.header(search_include(&include_paths, "libavdevice/avdevice.h"));
     }
 
-    if env::var("CARGO_FEATURE_AVFILTER").is_ok() {
+    if maybe_search_include(include_paths, "libavfilter/avfilter.h").is_some() {
         builder = builder
             .header(search_include(&include_paths, "libavfilter/buffersink.h"))
             .header(search_include(&include_paths, "libavfilter/buffersrc.h"))
             .header(search_include(&include_paths, "libavfilter/avfilter.h"));
     }
 
-    if env::var("CARGO_FEATURE_AVFORMAT").is_ok() {
+    if maybe_search_include(include_paths, "libavformat/avformat.h").is_some() {
         builder = builder
             .header(search_include(&include_paths, "libavformat/avformat.h"))
             .header(search_include(&include_paths, "libavformat/avio.h"));
     }
 
-    if env::var("CARGO_FEATURE_AVRESAMPLE").is_ok() {
+    if maybe_search_include(include_paths, "libavresample/avresample.h").is_some() {
         builder = builder.header(search_include(&include_paths, "libavresample/avresample.h"));
     }
 
@@ -1822,18 +1842,18 @@ fn main() {
         builder = builder.header(raw_color_params_path);
     }
 
-    if env::var("CARGO_FEATURE_POSTPROC").is_ok() {
+    if maybe_search_include(include_paths, "libpostproc/postprocess.h").is_some() {
         let postproc_path = search_include(&include_paths, "libpostproc/postprocess.h");
         if std::path::Path::new(&postproc_path).exists() {
             builder = builder.header(postproc_path);
         }
     }
 
-    if env::var("CARGO_FEATURE_SWRESAMPLE").is_ok() {
+    if maybe_search_include(include_paths, "libswresample/swresample.h").is_some() {
         builder = builder.header(search_include(&include_paths, "libswresample/swresample.h"));
     }
 
-    if env::var("CARGO_FEATURE_SWSCALE").is_ok() {
+    if maybe_search_include(include_paths, "libswscale/swscale.h").is_some() {
         builder = builder.header(search_include(&include_paths, "libswscale/swscale.h"));
     }
 

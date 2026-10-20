@@ -1,0 +1,38 @@
+{
+  "ffmpeg_version": "9.0.2",
+  "source_archive": "vendor/ffmpeg-9.0.2.tar.xz",
+  "source_archive_sha256": "b8663330d81917929710c9d6e644fbc0004a6c491b71900c1605a470a46e39b7",
+  "bindgen_version": "0.73.2",
+  "components": [
+    "avcodec",
+    "avdevice",
+    "avfilter",
+    "avformat",
+    "swresample",
+    "swscale"
+  ],
+  "archive": "bindings.tar.xz",
+  "archive_sha256": "04dc8ca6929021e1fcd1744dba256057188b43a001a07c38ce07beaa53ec51ec",
+  "bindings": {
+    "aarch64-apple-darwin.rs": {
+      "bytes": 1234253,
+      "sha256": "c0ef94adbc402ba9d2dcf03a445bc4debe571cb8b4956eaf00b924552d616208"
+    },
+    "aarch64-apple-ios-sim.rs": {
+      "bytes": 1234256,
+      "sha256": "fc6a59c4be7ea43e738438ee52e22d0693d5c99139dc9bda2c22d60189eea9eb"
+    },
+    "aarch64-apple-ios.rs": {
+      "bytes": 1234256,
+      "sha256": "fc6a59c4be7ea43e738438ee52e22d0693d5c99139dc9bda2c22d60189eea9eb"
+    },
+    "x86_64-apple-darwin.rs": {
+      "bytes": 1356283,
+      "sha256": "bd61ee204b2a53714ddcc5db80bb64b8739953e2b807bb2ee1a08f9fc2ce405a"
+    },
+    "x86_64-apple-ios.rs": {
+      "bytes": 1356286,
+      "sha256": "a4ff94fbe47afc10319575f36a02694ea9e9e6136194232867f978305dd42ea6"
+    }
+  }
+}
