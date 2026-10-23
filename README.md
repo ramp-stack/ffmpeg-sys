@@ -3,13 +3,13 @@
 RAMP Stack's fork of [ffmpeg-sys-next](https://github.com/zmwangx/rust-ffmpeg-sys),
 originally derived from [ffmpeg-sys](https://github.com/meh/rust-ffmpeg-sys).
 It includes the Apple framework-linking fix, bundled FFmpeg 9.0.2 C source, and
-pregenerated Apple bindings. The safe wrapper is
+pregenerated Apple, Linux, and Android bindings. The safe wrapper is
 [ramp-ffmpeg](https://github.com/ramp-stack/ffmpeg).
 
 ## Building
 
 The default features compile the bundled C source into static libraries with portable
-CPU settings. macOS and iOS builds use pregenerated bindings, so no installed FFmpeg,
+CPU settings. macOS, iOS, and Linux GNU builds use pregenerated bindings, so no installed FFmpeg,
 pkg-config, libclang, Git, or build-time source download is required. A native C
 compiler, Make, and the target SDK are still required. Intel targets automatically build
 bundled NASM to preserve optimized assembly; no separate NASM installation is needed.
@@ -19,7 +19,7 @@ NASM itself is built for the host machine and used only during the build.
 On Apple platforms, install Xcode's command-line tools and the SDK for the target.
 
 The pregenerated bindings cover Apple Silicon and Intel macOS, arm64 iOS devices,
-and arm64/x86_64 iOS simulators. They are used only with the bundled FFmpeg source.
+arm64/x86_64 iOS simulators, x86_64/aarch64 Linux GNU, and ARM64/x86_64 Android targets. They are used only with the bundled FFmpeg source.
 Other targets and system/prebuilt FFmpeg installations require the explicit
 `generate-bindings` feature and libclang. To use an installed FFmpeg, disable default
 features and enable `generate-bindings` plus the required component features.
@@ -60,3 +60,19 @@ In addition to feature flags declared in `Cargo.toml`, this crate performs vario
 - `ff_api_<feature>`, e.g. `ff_api_vaapi`, corresponding to whether their respective uppercase deprecation guards evaluate to true.
 
 - `ff_api_<feature>_is_defined`, e.g. `ff_api_vappi_is_defined`, similar to above except these are enabled as long as the corresponding deprecation guards are defined.
+
+## Android
+
+Install the Android NDK, the Rust Android target, and `cargo-ndk`. The Android bundle
+supports `aarch64-linux-android` and `x86_64-linux-android`, with API 28 as the
+validated minimum. For example:
+
+```sh
+cargo ndk -t arm64-v8a --platform 28 build
+```
+
+The build uses the NDK compiler, archiver, ranlib, nm, strip and sysroot. Preserve
+tool symlink names: LLVM selects ranlib/strip behavior from the invoked executable
+name. Default builds use the bundled bindings and do not need libclang. The final
+application linker must use 16 KB load-segment alignment and the APK packager must
+align uncompressed native libraries for 16 KB pages.

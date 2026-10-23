@@ -12,7 +12,7 @@
     "swscale"
   ],
   "archive": "bindings.tar.xz",
-  "archive_sha256": "04dc8ca6929021e1fcd1744dba256057188b43a001a07c38ce07beaa53ec51ec",
+  "archive_sha256": "befb44432ab8637aabf0ed70fa39e707a8e7eb56ef13940dc6415c3808dc278e",
   "bindings": {
     "aarch64-apple-darwin.rs": {
       "bytes": 1234253,
@@ -26,6 +26,14 @@
       "bytes": 1234256,
       "sha256": "fc6a59c4be7ea43e738438ee52e22d0693d5c99139dc9bda2c22d60189eea9eb"
     },
+    "aarch64-linux-android.rs": {
+      "bytes": 1168491,
+      "sha256": "621a9a2ee6d1232a263ee779fd66951039ec6eff11fb4eb77ded1709503dee1d"
+    },
+    "aarch64-unknown-linux-gnu.rs": {
+      "bytes": 1141946,
+      "sha256": "b3c3e70972adbd2dff53c0c05157121d623828427e309e8947de98e844c39b94"
+    },
     "x86_64-apple-darwin.rs": {
       "bytes": 1356283,
       "sha256": "bd61ee204b2a53714ddcc5db80bb64b8739953e2b807bb2ee1a08f9fc2ce405a"
@@ -33,6 +41,14 @@
     "x86_64-apple-ios.rs": {
       "bytes": 1356286,
       "sha256": "a4ff94fbe47afc10319575f36a02694ea9e9e6136194232867f978305dd42ea6"
+    },
+    "x86_64-linux-android.rs": {
+      "bytes": 1195245,
+      "sha256": "2b2aaf515899b6cc7c1f7bb583caca86bfa0e13398c8e5edb8e20a6cc6022430"
+    },
+    "x86_64-unknown-linux-gnu.rs": {
+      "bytes": 1142378,
+      "sha256": "ff39163c6fd700c409854fa351410ee9c73a3450b729585eded47247f9006fd8"
     }
   }
 }

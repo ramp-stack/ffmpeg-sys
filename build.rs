@@ -318,6 +318,13 @@ fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<(
     // Command's path is not relative to command's current_dir
     let configure_path = source_dir.join("configure");
     assert!(configure_path.exists());
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+        // Older glibc exports sysctl even when the target no longer supplies its header.
+        let source = fs::read_to_string(&configure_path)?;
+        fs::write(&configure_path, source.replace(
+            "check_func  sysctl\n", "check_func_headers sys/sysctl.h sysctl\n",
+        ))?;
+    }
     let mut configure = if cfg!(target_os = "windows") {
         if Command::new("sh")
             .arg("-c")
@@ -368,7 +375,8 @@ fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<(
 
         // Apple-clang needs this, -arch is not enough.
         let target_flag = format!("--target={target}");
-        if cc.is_flag_supported(&target_flag).unwrap_or(false) {
+        if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android")
+            && cc.is_flag_supported(&target_flag).unwrap_or(false) {
             configure.arg(format!("--extra-cflags={target_flag}"));
             configure.arg(format!("--extra-ldflags={target_flag}"));
         }
@@ -485,14 +493,11 @@ fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<(
         }
         configure.arg(format!("--cc={android_cc_raw_path}"));
 
-        for tool in ["nm", "strip"] {
+        for tool in ["ar", "ranlib", "nm", "strip"] {
             configure.arg(format!(
                 "--{tool}={}",
-                android_cc_path
-                    .join("..")
+                android_cc_path.parent().unwrap()
                     .join(format!("llvm-{tool}"))
-                    .canonicalize()
-                    .unwrap_or_else(|_| panic!("failed to resolve a path to android {}", tool))
                     .display()
             ));
         }
@@ -512,8 +517,22 @@ fn build(sysroot: Option<&str>, apple_version_min: Option<&str>) -> io::Result<(
 
         // https://github.com/Javernaut/ffmpeg-android-maker/blob/master/scripts/ffmpeg/build.sh#L30
         // configure.arg(--extra-ldflags=-WL,-z,max-page-size=16384");
-        // required for android
+        configure.arg(format!("--sysroot={}", sysroot.unwrap()));
         configure.arg("--extra-cflags=-fPIC");
+        configure.arg("--extra-ldflags=-Wl,-z,max-page-size=16384");
+    }
+
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+        let tools = cc::Build::new();
+        let compiler = tools.get_compiler();
+        configure.arg(format!("--cc={}", compiler.path().display()));
+        let flags = compiler.args().iter().map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>().join(" ");
+        configure.arg(format!("--extra-cflags={flags}"));
+        configure.arg(format!("--extra-ldflags={flags}"));
+        configure.arg(format!("--ar={}", tools.get_archiver().get_program().to_string_lossy()));
+        configure.arg(format!("--ranlib={}", tools.get_ranlib().get_program().to_string_lossy()));
+        if let Ok(nm) = env::var("NM") {configure.arg(format!("--nm={nm}"));}
     }
 
     // control debug build
